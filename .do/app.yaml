@@ -1,0 +1,282 @@
+# DigitalOcean App Platform Specification for Archon MCP
+#
+# Deployment Guide: https://docs.digitalocean.com/products/app-platform/
+#
+# INSTRUCTIONS:
+# 1. Fork https://github.com/coleam00/Archon to your GitHub account
+# 2. Create this file at .do/app.yaml in your forked repo
+# 3. In DigitalOcean Console: Apps → Create App → Select your repo
+# 4. DigitalOcean will auto-detect this spec file
+# 5. Configure environment variables in the DO console (see env vars below)
+#
+# REQUIRED EXTERNAL SERVICES:
+# - Supabase (cloud): https://supabase.com - Create project and run migration/complete_setup.sql
+#
+# Author: Generated for E2I Initiative deployment
+# Date: December 2025
+
+name: archon-mcp
+
+region: nyc  # Change to your preferred region: nyc, sfo, ams, sgp, lon, fra, blr, syd, tor
+
+services:
+  # =============================================================================
+  # ARCHON SERVER - Main API Backend (FastAPI + Socket.IO + Crawling)
+  # =============================================================================
+  - name: archon-server
+    github:
+      repo: enunezvn/Archon  # CHANGE THIS to your forked repo
+      branch: stable  # Use 'main' for latest features, 'stable' for production
+      deploy_on_push: true
+    dockerfile_path: python/Dockerfile.server
+    source_dir: /
+
+    instance_size_slug: professional-xs  # 1 vCPU, 1GB RAM - upgrade for crawler
+    instance_count: 1
+
+    http_port: 8181
+
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 30
+      period_seconds: 30
+      timeout_seconds: 10
+      success_threshold: 1
+      failure_threshold: 3
+
+    envs:
+      # --- Database Configuration (REQUIRED) ---
+      - key: SUPABASE_URL
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+        # Set value in DigitalOcean Console
+
+      - key: SUPABASE_SERVICE_KEY
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+        # Set value in DigitalOcean Console - Use LEGACY key (longer one)
+
+      # --- Service Discovery ---
+      - key: SERVICE_DISCOVERY_MODE
+        value: "digitalocean"
+        scope: RUN_TIME
+
+      - key: LOG_LEVEL
+        value: "INFO"
+        scope: RUN_TIME
+
+      # --- Port Configuration ---
+      - key: ARCHON_SERVER_PORT
+        value: "8181"
+        scope: RUN_AND_BUILD_TIME
+
+      - key: ARCHON_MCP_PORT
+        value: "8051"
+        scope: RUN_TIME
+
+      - key: ARCHON_AGENTS_PORT
+        value: "8052"
+        scope: RUN_TIME
+
+      # --- LLM Configuration (Optional - configure in UI after deployment) ---
+      - key: OPENAI_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+        # Optional: Set if using OpenAI
+
+      - key: LOGFIRE_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+        # Optional: Set if using Logfire for observability
+
+      # --- Feature Flags ---
+      - key: AGENTS_ENABLED
+        value: "false"
+        scope: RUN_TIME
+        # Set to "true" if deploying agents service
+
+  # =============================================================================
+  # ARCHON MCP SERVER - Model Context Protocol Endpoint
+  # =============================================================================
+  - name: archon-mcp
+    github:
+      repo: enunezvn/Archon  # CHANGE THIS to your forked repo
+      branch: stable
+      deploy_on_push: true
+    dockerfile_path: python/Dockerfile.mcp
+    source_dir: /
+
+    instance_size_slug: basic-xxs  # 1 vCPU, 512MB RAM - MCP is lightweight
+    instance_count: 1
+
+    http_port: 8051
+
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 20
+      period_seconds: 30
+      timeout_seconds: 10
+      success_threshold: 1
+      failure_threshold: 3
+
+    envs:
+      # --- Database Configuration (REQUIRED) ---
+      - key: SUPABASE_URL
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+
+      - key: SUPABASE_SERVICE_KEY
+        scope: RUN_AND_BUILD_TIME
+        type: SECRET
+
+      # --- Service Discovery ---
+      - key: SERVICE_DISCOVERY_MODE
+        value: "digitalocean"
+        scope: RUN_TIME
+
+      - key: TRANSPORT
+        value: "sse"
+        scope: RUN_TIME
+
+      - key: LOG_LEVEL
+        value: "INFO"
+        scope: RUN_TIME
+
+      # --- Internal Service URLs ---
+      # These reference the other services in the app
+      - key: API_SERVICE_URL
+        value: "${archon-server.PRIVATE_URL}"
+        scope: RUN_TIME
+
+      - key: AGENTS_SERVICE_URL
+        value: "http://archon-agents:8052"  # Only if agents enabled
+        scope: RUN_TIME
+
+      # --- Port Configuration ---
+      - key: ARCHON_MCP_PORT
+        value: "8051"
+        scope: RUN_AND_BUILD_TIME
+
+      - key: ARCHON_SERVER_PORT
+        value: "8181"
+        scope: RUN_TIME
+
+      - key: ARCHON_AGENTS_PORT
+        value: "8052"
+        scope: RUN_TIME
+
+      # --- Feature Flags ---
+      - key: AGENTS_ENABLED
+        value: "false"
+        scope: RUN_TIME
+
+  # =============================================================================
+  # ARCHON FRONTEND - React/Vite UI Dashboard
+  # =============================================================================
+  - name: archon-frontend
+    github:
+      repo: enunezvn/Archon  # CHANGE THIS to your forked repo
+      branch: stable
+      deploy_on_push: true
+    source_dir: archon-ui-main
+
+    # Use static site for frontend (cheaper) or web service if you need SSR
+    environment_slug: node-js
+
+    instance_size_slug: basic-xxs
+    instance_count: 1
+
+    http_port: 3737
+
+    build_command: npm install && npm run build
+    run_command: npm run preview -- --host 0.0.0.0 --port 3737
+
+    envs:
+      # --- Frontend Environment ---
+      - key: DOCKER_ENV
+        value: "true"
+        scope: RUN_AND_BUILD_TIME
+
+      - key: VITE_API_URL
+        value: "${archon-server.PUBLIC_URL}"
+        scope: RUN_AND_BUILD_TIME
+
+      - key: ARCHON_SERVER_PORT
+        value: "8181"
+        scope: RUN_AND_BUILD_TIME
+
+      - key: NODE_ENV
+        value: "production"
+        scope: RUN_AND_BUILD_TIME
+
+# =============================================================================
+# OPTIONAL: ARCHON AGENTS SERVICE (Uncomment if needed)
+# =============================================================================
+# - name: archon-agents
+#   github:
+#     repo: enunezvn/Archon
+#     branch: stable
+#     deploy_on_push: true
+#   dockerfile_path: python/Dockerfile.agents
+#   source_dir: /
+#
+#   instance_size_slug: professional-xs
+#   instance_count: 1
+#
+#   http_port: 8052
+#
+#   envs:
+#     - key: SUPABASE_URL
+#       scope: RUN_AND_BUILD_TIME
+#       type: SECRET
+#
+#     - key: SUPABASE_SERVICE_KEY
+#       scope: RUN_AND_BUILD_TIME
+#       type: SECRET
+#
+#     - key: SERVICE_DISCOVERY_MODE
+#       value: "digitalocean"
+#       scope: RUN_TIME
+#
+#     - key: ARCHON_AGENTS_PORT
+#       value: "8052"
+#       scope: RUN_AND_BUILD_TIME
+
+# =============================================================================
+# ALERTS (Optional - Configure monitoring)
+# =============================================================================
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
+
+# =============================================================================
+# INGRESS ROUTING (Customize domains if needed)
+# =============================================================================
+ingress:
+  rules:
+    # Main UI
+    - component:
+        name: archon-frontend
+      match:
+        path:
+          prefix: /
+
+    # API endpoints
+    - component:
+        name: archon-server
+      match:
+        path:
+          prefix: /api
+
+    - component:
+        name: archon-server
+      match:
+        path:
+          prefix: /socket.io
+
+    # MCP endpoint for AI coding assistants
+    - component:
+        name: archon-mcp
+      match:
+        path:
+          prefix: /mcp
