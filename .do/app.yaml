@@ -28,7 +28,7 @@ services:
       repo: enunezvn/Archon  # CHANGE THIS to your forked repo
       branch: stable  # Use 'main' for latest features, 'stable' for production
       deploy_on_push: true
-    dockerfile_path: Dockerfile.server
+    dockerfile_path: python/Dockerfile.server
     source_dir: python
 
     instance_size_slug: professional-xs  # 1 vCPU, 1GB RAM - upgrade for crawler
@@ -103,7 +103,7 @@ services:
       repo: enunezvn/Archon  # CHANGE THIS to your forked repo
       branch: stable
       deploy_on_push: true
-    dockerfile_path: Dockerfile.mcp
+    dockerfile_path: python/Dockerfile.mcp
     source_dir: python
 
     instance_size_slug: basic-xxs  # 1 vCPU, 512MB RAM - MCP is lightweight
