@@ -110,12 +110,12 @@ services:
     http_port: 8051
 
     health_check:
-      http_path: /mcp/sse
+      port: 8051
       initial_delay_seconds: 30
       period_seconds: 30
       timeout_seconds: 10
       success_threshold: 1
-      failure_threshold: 5
+      failure_threshold: 3
 
     envs:
       # --- Database Configuration (REQUIRED) ---
