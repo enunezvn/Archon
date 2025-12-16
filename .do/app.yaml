@@ -47,14 +47,12 @@ services:
     envs:
       # --- Database Configuration (REQUIRED) ---
       - key: SUPABASE_URL
+        value: "https://tnqukarrenvlwlzkimet.supabase.co"
         scope: RUN_AND_BUILD_TIME
-        type: SECRET
-        # Set value in DigitalOcean Console
 
       - key: SUPABASE_SERVICE_KEY
+        value: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRucXVrYXJyZW52bHdsemtpbWV0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDI0NDMxOCwiZXhwIjoyMDc5ODIwMzE4fQ.m2PwMz-j7T_VTJI5IAwKc0kRJm_SoAlp6sp2DW7N3-w"
         scope: RUN_AND_BUILD_TIME
-        type: SECRET
-        # Set value in DigitalOcean Console - Use LEGACY key (longer one)
 
       # --- Service Discovery ---
       - key: SERVICE_DISCOVERY_MODE
@@ -122,12 +120,12 @@ services:
     envs:
       # --- Database Configuration (REQUIRED) ---
       - key: SUPABASE_URL
+        value: "https://tnqukarrenvlwlzkimet.supabase.co"
         scope: RUN_AND_BUILD_TIME
-        type: SECRET
 
       - key: SUPABASE_SERVICE_KEY
+        value: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRucXVrYXJyZW52bHdsemtpbWV0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDI0NDMxOCwiZXhwIjoyMDc5ODIwMzE4fQ.m2PwMz-j7T_VTJI5IAwKc0kRJm_SoAlp6sp2DW7N3-w"
         scope: RUN_AND_BUILD_TIME
-        type: SECRET
 
       # --- Service Discovery ---
       - key: SERVICE_DISCOVERY_MODE
