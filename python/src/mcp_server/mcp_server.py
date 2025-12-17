@@ -559,90 +559,29 @@ def main():
         is_digitalocean = os.getenv("SERVICE_DISCOVERY_MODE") == "digitalocean"
 
         if is_digitalocean:
-            logger.info("🌊 DigitalOcean mode: Creating path rewriting proxy")
-            import asyncio
-            import uvicorn
-            from fastapi import FastAPI, Request
-            from fastapi.responses import StreamingResponse, JSONResponse
-            import httpx
+            logger.info("🌊 DigitalOcean mode: Mounting MCP on /mcp prefix")
+            from fastapi import FastAPI
+            from fastapi.middleware.cors import CORSMiddleware
 
-            # Create a proxy app that forwards requests to the MCP server with path prefix
-            proxy_app = FastAPI()
+            # Create wrapper FastAPI app
+            wrapper_app = FastAPI()
 
-            @proxy_app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
-            async def proxy(path: str, request: Request):
-                # Add /mcp prefix to the path
-                target_path = f"/mcp/{path}" if path else "/mcp"
-                target_url = f"http://127.0.0.1:8052{target_path}"
-
-                logger.info(f"Proxying {request.url.path} -> {target_url}")
-
-                # Forward the request
-                try:
-                    async with httpx.AsyncClient(timeout=30.0) as client:
-                        headers = dict(request.headers)
-                        headers.pop("host", None)  # Remove host header
-
-                        response = await client.request(
-                            method=request.method,
-                            url=target_url,
-                            headers=headers,
-                            content=await request.body(),
-                            params=request.query_params,
-                        )
-
-                        # Return the response - pass through directly without re-encoding
-                        from fastapi.responses import Response as FastAPIResponse
-
-                        if "text/event-stream" in response.headers.get("content-type", ""):
-                            # Stream SSE responses
-                            async def stream_response():
-                                async for chunk in response.aiter_bytes():
-                                    yield chunk
-                            return StreamingResponse(
-                                stream_response(),
-                                status_code=response.status_code,
-                                media_type=response.headers.get("content-type"),
-                                headers={k: v for k, v in response.headers.items() if k.lower() not in ("content-length", "transfer-encoding")},
-                            )
-                        else:
-                            # Pass through other responses directly
-                            return FastAPIResponse(
-                                content=response.content,
-                                status_code=response.status_code,
-                                media_type=response.headers.get("content-type"),
-                                headers={k: v for k, v in response.headers.items() if k.lower() not in ("content-length", "transfer-encoding")},
-                            )
-                except Exception as e:
-                    logger.error(f"Proxy error: {e}")
-                    return JSONResponse(
-                        content={"error": str(e)},
-                        status_code=500,
-                    )
-
-            # Start MCP server on internal port 8052 using subprocess
-            import subprocess
-            logger.info("Starting internal MCP server on port 8052...")
-
-            # Start MCP server as a subprocess
-            env = os.environ.copy()
-            env["ARCHON_MCP_PORT"] = "8052"
-            env["SERVICE_DISCOVERY_MODE"] = "local"  # Prevent recursive proxy
-
-            mcp_process = subprocess.Popen(
-                ["python", "-m", "src.mcp_server.mcp_server"],
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+            # Add CORS middleware
+            wrapper_app.add_middleware(
+                CORSMiddleware,
+                allow_origins=["*"],
+                allow_credentials=True,
+                allow_methods=["*"],
+                allow_headers=["*"],
             )
 
-            # Wait for MCP server to start
-            time.sleep(5)
-            logger.info("✓ Internal MCP server started on port 8052")
+            # Mount the MCP app at /mcp prefix
+            wrapper_app.mount("/mcp", mcp._get_asgi_app())
 
-            # Start proxy on public port
-            logger.info(f"🌐 Starting proxy server on http://{server_host}:{server_port}")
-            uvicorn.run(proxy_app, host=server_host, port=server_port)
+            # Start the wrapper app
+            logger.info(f"🌐 Starting MCP server on http://{server_host}:{server_port}/mcp")
+            import uvicorn
+            uvicorn.run(wrapper_app, host=server_host, port=server_port)
 
         else:
             # Normal mode
