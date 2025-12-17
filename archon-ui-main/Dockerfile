@@ -3,6 +3,9 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
+# Cache bust argument to force fresh builds when needed
+ARG CACHE_BUST=2025-12-17-01
+
 # Install system dependencies needed for building
 RUN apk add --no-cache python3 make g++
 
@@ -15,7 +18,7 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build the application for production
+# Build the application for production (cache bust: ${CACHE_BUST})
 RUN npm run build
 
 # Production stage - lightweight Node image to serve built files
