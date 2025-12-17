@@ -559,45 +559,43 @@ def main():
         is_digitalocean = os.getenv("SERVICE_DISCOVERY_MODE") == "digitalocean"
 
         if is_digitalocean:
-            logger.info("🌊 DigitalOcean mode: Adding ASGI middleware to restore /mcp prefix")
-            from starlette.applications import Starlette
-            from starlette.middleware import Middleware
-            from starlette.middleware.cors import CORSMiddleware
+            logger.info("🌊 DigitalOcean mode: Adding pure ASGI middleware to restore /mcp prefix")
 
-            # Create ASGI middleware that adds /mcp prefix
-            class MCPPrefixMiddleware:
+            # Pure ASGI middleware - no external dependencies
+            class MCPPathPrefixMiddleware:
+                """
+                ASGI middleware that prepends /mcp to all incoming request paths.
+                This solves DigitalOcean ingress prefix stripping.
+                """
                 def __init__(self, app):
                     self.app = app
 
                 async def __call__(self, scope, receive, send):
-                    if scope["type"] == "http":
-                        # Add /mcp prefix to the path
-                        scope["path"] = f"/mcp{scope['path']}"
-                        scope["raw_path"] = f"/mcp{scope['raw_path'].decode()}".encode()
+                    if scope["type"] in ("http", "websocket"):
+                        # Prepend /mcp to the path
+                        original_path = scope["path"]
+                        scope["path"] = f"/mcp{original_path}"
+
+                        # Also update raw_path if present
+                        if "raw_path" in scope:
+                            try:
+                                original_raw = scope["raw_path"].decode("utf-8")
+                                scope["raw_path"] = f"/mcp{original_raw}".encode("utf-8")
+                            except Exception:
+                                # If decoding fails, just prepend bytes
+                                scope["raw_path"] = b"/mcp" + scope["raw_path"]
+
+                        logger.debug(f"Path rewrite: {original_path} → {scope['path']}")
 
                     await self.app(scope, receive, send)
 
-            # Get the FastMCP ASGI app
+            # Get the FastMCP ASGI app and wrap it
             mcp_app = mcp._get_asgi_app()
+            wrapped_app = MCPPathPrefixMiddleware(mcp_app)
 
-            # Wrap it with our prefix middleware and CORS
-            app = Starlette(
-                middleware=[
-                    Middleware(
-                        CORSMiddleware,
-                        allow_origins=["*"],
-                        allow_credentials=True,
-                        allow_methods=["*"],
-                        allow_headers=["*"],
-                    ),
-                ]
-            )
-
-            # Apply prefix middleware
-            wrapped_app = MCPPrefixMiddleware(mcp_app)
-
-            # Run with uvicorn
-            logger.info(f"🌐 Starting MCP server with prefix middleware on http://{server_host}:{server_port}")
+            # Run with uvicorn (CORS already configured in DigitalOcean ingress)
+            logger.info(f"🌐 Starting MCP server with path prefix middleware on http://{server_host}:{server_port}")
+            logger.info(f"   Incoming /sse will be rewritten to /mcp/sse")
             import uvicorn
             uvicorn.run(wrapped_app, host=server_host, port=server_port)
 
