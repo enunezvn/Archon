@@ -65,22 +65,26 @@ services:
         value: "8181"
         scope: RUN_TIME
 
+      - key: ARCHON_AGENTS_PORT
+        value: "8052"
+        scope: RUN_TIME
+
       # --- Feature Flags ---
       - key: AGENTS_ENABLED
         value: "false"
         scope: RUN_TIME
 
-# CORS configuration for external MCP client access
-cors:
-  allow_origins:
-    - prefix: https://
-  allow_methods:
-    - GET
-    - POST
-    - OPTIONS
-  allow_headers:
-    - "*"
-  allow_credentials: true
+    # CORS configuration for external MCP client access
+    cors:
+      allow_origins:
+        - prefix: https://
+      allow_methods:
+        - GET
+        - POST
+        - OPTIONS
+      allow_headers:
+        - "*"
+      allow_credentials: true
 
 alerts:
   - rule: DEPLOYMENT_FAILED
