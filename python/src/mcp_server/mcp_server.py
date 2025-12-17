@@ -554,35 +554,100 @@ def main():
 
         logger.info("🚀 Starting Archon MCP Server")
         logger.info("   Mode: Streamable HTTP")
-        logger.info(f"   URL: http://{server_host}:{server_port}/mcp")
-
-        mcp_logger.info("🔥 Logfire initialized for MCP server")
-        mcp_logger.info(f"🌟 Starting MCP server - host={server_host}, port={server_port}")
 
         # Check if we're in DigitalOcean (ingress strips /mcp prefix)
         is_digitalocean = os.getenv("SERVICE_DISCOVERY_MODE") == "digitalocean"
 
         if is_digitalocean:
-            logger.info("🌊 DigitalOcean mode: Adding path rewriting middleware")
-            # Import after mcp is initialized
-            from starlette.applications import Starlette
-            from starlette.middleware import Middleware
-            from starlette.middleware.base import BaseHTTPMiddleware
-            from starlette.requests import Request
+            logger.info("🌊 DigitalOcean mode: Creating path rewriting proxy")
+            import uvicorn
+            from fastapi import FastAPI, Request
+            from fastapi.responses import StreamingResponse, JSONResponse
+            import httpx
 
-            class PathRewriteMiddleware(BaseHTTPMiddleware):
-                async def dispatch(self, request: Request, call_next):
-                    # Rewrite paths: /sse -> /mcp/sse, /messages -> /mcp/messages
-                    if request.url.path in ["/sse", "/messages"]:
-                        request.scope["path"] = f"/mcp{request.url.path}"
-                    return await call_next(request)
+            # Create a proxy app that forwards requests to the MCP server with path prefix
+            proxy_app = FastAPI()
 
-            # Get the FastMCP app and add middleware
-            if hasattr(mcp, 'app'):
-                mcp.app.add_middleware(PathRewriteMiddleware)
-                logger.info("✓ Path rewriting middleware added")
+            @proxy_app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
+            async def proxy(path: str, request: Request):
+                # Add /mcp prefix to the path
+                target_path = f"/mcp/{path}" if path else "/mcp"
+                target_url = f"http://127.0.0.1:8052{target_path}"
 
-        mcp.run(transport="streamable-http")
+                logger.info(f"Proxying {request.url.path} -> {target_url}")
+
+                # Forward the request
+                async with httpx.AsyncClient() as client:
+                    headers = dict(request.headers)
+                    headers.pop("host", None)  # Remove host header
+
+                    response = await client.request(
+                        method=request.method,
+                        url=target_url,
+                        headers=headers,
+                        content=await request.body(),
+                        params=request.query_params,
+                    )
+
+                    # Return the response
+                    if "text/event-stream" in response.headers.get("content-type", ""):
+                        async def stream_response():
+                            async for chunk in response.aiter_bytes():
+                                yield chunk
+                        return StreamingResponse(
+                            stream_response(),
+                            status_code=response.status_code,
+                            headers=dict(response.headers),
+                        )
+                    else:
+                        return JSONResponse(
+                            content=response.json() if response.headers.get("content-type", "").startswith("application/json") else {"data": response.text},
+                            status_code=response.status_code,
+                            headers=dict(response.headers),
+                        )
+
+            # Start MCP server on internal port 8052
+            import threading
+            def run_mcp_server():
+                import uvicorn
+                # Create new instance with internal port
+                internal_mcp = FastMCP(
+                    "archon-mcp-server",
+                    description="MCP server for Archon - uses HTTP calls to other services",
+                    instructions=MCP_INSTRUCTIONS,
+                    lifespan=lifespan,
+                    host="127.0.0.1",
+                    port=8052,
+                )
+                # Register all the same tools
+                from .features.rag import register_rag_tools
+                from .features.projects import register_project_tools, register_task_tools, register_document_tools, register_version_tools, register_feature_tools
+                register_rag_tools(internal_mcp, archon_context)
+                register_project_tools(internal_mcp, archon_context)
+                register_task_tools(internal_mcp, archon_context)
+                register_document_tools(internal_mcp, archon_context)
+                register_version_tools(internal_mcp, archon_context)
+                register_feature_tools(internal_mcp, archon_context)
+
+                internal_mcp.run(transport="streamable-http")
+
+            mcp_thread = threading.Thread(target=run_mcp_server, daemon=True)
+            mcp_thread.start()
+
+            # Wait for MCP server to start
+            time.sleep(2)
+            logger.info("✓ Internal MCP server started on port 8052")
+
+            # Start proxy on public port
+            logger.info(f"🌐 Starting proxy server on http://{server_host}:{server_port}")
+            uvicorn.run(proxy_app, host=server_host, port=server_port)
+
+        else:
+            # Normal mode
+            logger.info(f"   URL: http://{server_host}:{server_port}/mcp")
+            mcp_logger.info("🔥 Logfire initialized for MCP server")
+            mcp_logger.info(f"🌟 Starting MCP server - host={server_host}, port={server_port}")
+            mcp.run(transport="streamable-http")
 
     except Exception as e:
         mcp_logger.error(f"💥 Fatal error in main - error={str(e)}, error_type={type(e).__name__}")
