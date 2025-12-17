@@ -198,9 +198,8 @@ services:
         value: "true"
         scope: RUN_AND_BUILD_TIME
 
-      - key: VITE_API_URL
-        value: "${archon-server.PUBLIC_URL}"
-        scope: RUN_AND_BUILD_TIME
+      # VITE_API_URL intentionally not set - use relative URLs
+      # The ingress routing handles /api → archon-server
 
       - key: ARCHON_SERVER_PORT
         value: "8181"
