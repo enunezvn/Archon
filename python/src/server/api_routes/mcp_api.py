@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException
 # Import unified logging
 from ..config.logfire_config import api_logger, safe_set_attribute, safe_span
 
-router = APIRouter(prefix="/api/mcp", tags=["mcp"])
+router = APIRouter(prefix="/mcp", tags=["mcp"])
 
 
 def get_container_status() -> dict[str, Any]:

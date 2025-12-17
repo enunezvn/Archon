@@ -36,7 +36,7 @@ from ..utils.document_processing import extract_text_from_document
 logger = get_logger(__name__)
 
 # Create router
-router = APIRouter(prefix="/api", tags=["knowledge"])
+router = APIRouter(prefix="", tags=["knowledge"])
 
 
 # Create a semaphore to limit concurrent crawl OPERATIONS (not pages within a crawl)

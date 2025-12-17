@@ -15,7 +15,7 @@ from ..config.logfire_config import get_logger
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/api/bug-report", tags=["bug-report"])
+router = APIRouter(prefix="/bug-report", tags=["bug-report"])
 
 
 class BugContext(BaseModel):
