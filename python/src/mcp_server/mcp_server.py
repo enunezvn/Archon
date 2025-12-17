@@ -621,7 +621,11 @@ def main():
                 )
                 # Register all the same tools
                 from .features.rag import register_rag_tools
-                from .features.projects import register_project_tools, register_task_tools, register_document_tools, register_version_tools, register_feature_tools
+                from .features.projects import register_project_tools
+                from .features.tasks import register_task_tools
+                from .features.documents import register_document_tools, register_version_tools
+                from .features.feature_tools import register_feature_tools
+
                 register_rag_tools(internal_mcp, archon_context)
                 register_project_tools(internal_mcp, archon_context)
                 register_task_tools(internal_mcp, archon_context)
