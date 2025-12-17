@@ -591,21 +591,27 @@ def main():
                             params=request.query_params,
                         )
 
-                        # Return the response
+                        # Return the response - pass through directly without re-encoding
+                        from fastapi.responses import Response as FastAPIResponse
+
                         if "text/event-stream" in response.headers.get("content-type", ""):
+                            # Stream SSE responses
                             async def stream_response():
                                 async for chunk in response.aiter_bytes():
                                     yield chunk
                             return StreamingResponse(
                                 stream_response(),
                                 status_code=response.status_code,
-                                headers=dict(response.headers),
+                                media_type=response.headers.get("content-type"),
+                                headers={k: v for k, v in response.headers.items() if k.lower() not in ("content-length", "transfer-encoding")},
                             )
                         else:
-                            return JSONResponse(
-                                content=response.json() if response.headers.get("content-type", "").startswith("application/json") else {"data": response.text},
+                            # Pass through other responses directly
+                            return FastAPIResponse(
+                                content=response.content,
                                 status_code=response.status_code,
-                                headers=dict(response.headers),
+                                media_type=response.headers.get("content-type"),
+                                headers={k: v for k, v in response.headers.items() if k.lower() not in ("content-length", "transfer-encoding")},
                             )
                 except Exception as e:
                     logger.error(f"Proxy error: {e}")
