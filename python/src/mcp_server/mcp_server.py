@@ -560,6 +560,7 @@ def main():
 
         if is_digitalocean:
             logger.info("🌊 DigitalOcean mode: Creating path rewriting proxy")
+            import asyncio
             import uvicorn
             from fastapi import FastAPI, Request
             from fastapi.responses import StreamingResponse, JSONResponse
@@ -577,69 +578,60 @@ def main():
                 logger.info(f"Proxying {request.url.path} -> {target_url}")
 
                 # Forward the request
-                async with httpx.AsyncClient() as client:
-                    headers = dict(request.headers)
-                    headers.pop("host", None)  # Remove host header
+                try:
+                    async with httpx.AsyncClient(timeout=30.0) as client:
+                        headers = dict(request.headers)
+                        headers.pop("host", None)  # Remove host header
 
-                    response = await client.request(
-                        method=request.method,
-                        url=target_url,
-                        headers=headers,
-                        content=await request.body(),
-                        params=request.query_params,
+                        response = await client.request(
+                            method=request.method,
+                            url=target_url,
+                            headers=headers,
+                            content=await request.body(),
+                            params=request.query_params,
+                        )
+
+                        # Return the response
+                        if "text/event-stream" in response.headers.get("content-type", ""):
+                            async def stream_response():
+                                async for chunk in response.aiter_bytes():
+                                    yield chunk
+                            return StreamingResponse(
+                                stream_response(),
+                                status_code=response.status_code,
+                                headers=dict(response.headers),
+                            )
+                        else:
+                            return JSONResponse(
+                                content=response.json() if response.headers.get("content-type", "").startswith("application/json") else {"data": response.text},
+                                status_code=response.status_code,
+                                headers=dict(response.headers),
+                            )
+                except Exception as e:
+                    logger.error(f"Proxy error: {e}")
+                    return JSONResponse(
+                        content={"error": str(e)},
+                        status_code=500,
                     )
 
-                    # Return the response
-                    if "text/event-stream" in response.headers.get("content-type", ""):
-                        async def stream_response():
-                            async for chunk in response.aiter_bytes():
-                                yield chunk
-                        return StreamingResponse(
-                            stream_response(),
-                            status_code=response.status_code,
-                            headers=dict(response.headers),
-                        )
-                    else:
-                        return JSONResponse(
-                            content=response.json() if response.headers.get("content-type", "").startswith("application/json") else {"data": response.text},
-                            status_code=response.status_code,
-                            headers=dict(response.headers),
-                        )
+            # Start MCP server on internal port 8052 using subprocess
+            import subprocess
+            logger.info("Starting internal MCP server on port 8052...")
 
-            # Start MCP server on internal port 8052
-            import threading
-            def run_mcp_server():
-                import uvicorn
-                # Create new instance with internal port
-                internal_mcp = FastMCP(
-                    "archon-mcp-server",
-                    description="MCP server for Archon - uses HTTP calls to other services",
-                    instructions=MCP_INSTRUCTIONS,
-                    lifespan=lifespan,
-                    host="127.0.0.1",
-                    port=8052,
-                )
-                # Register all the same tools
-                from .features.rag import register_rag_tools
-                from .features.projects import register_project_tools
-                from .features.tasks import register_task_tools
-                from .features.documents import register_document_tools, register_version_tools
-                from .features.feature_tools import register_feature_tools
+            # Start MCP server as a subprocess
+            env = os.environ.copy()
+            env["ARCHON_MCP_PORT"] = "8052"
+            env["SERVICE_DISCOVERY_MODE"] = "local"  # Prevent recursive proxy
 
-                register_rag_tools(internal_mcp, archon_context)
-                register_project_tools(internal_mcp, archon_context)
-                register_task_tools(internal_mcp, archon_context)
-                register_document_tools(internal_mcp, archon_context)
-                register_version_tools(internal_mcp, archon_context)
-                register_feature_tools(internal_mcp, archon_context)
-
-                internal_mcp.run(transport="streamable-http")
-
-            mcp_thread = threading.Thread(target=run_mcp_server, daemon=True)
-            mcp_thread.start()
+            mcp_process = subprocess.Popen(
+                ["python", "-m", "src.mcp_server.mcp_server"],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
 
             # Wait for MCP server to start
-            time.sleep(2)
+            time.sleep(5)
             logger.info("✓ Internal MCP server started on port 8052")
 
             # Start proxy on public port
