@@ -555,40 +555,11 @@ def main():
         logger.info("🚀 Starting Archon MCP Server")
         logger.info("   Mode: Streamable HTTP")
 
-        # Check if we're in DigitalOcean (ingress strips /mcp prefix)
-        is_digitalocean = os.getenv("SERVICE_DISCOVERY_MODE") == "digitalocean"
-
-        if is_digitalocean:
-            logger.info("🌊 DigitalOcean mode: Mounting MCP on /mcp prefix")
-            from fastapi import FastAPI
-            from fastapi.middleware.cors import CORSMiddleware
-
-            # Create wrapper FastAPI app
-            wrapper_app = FastAPI()
-
-            # Add CORS middleware
-            wrapper_app.add_middleware(
-                CORSMiddleware,
-                allow_origins=["*"],
-                allow_credentials=True,
-                allow_methods=["*"],
-                allow_headers=["*"],
-            )
-
-            # Mount the MCP app at /mcp prefix
-            wrapper_app.mount("/mcp", mcp._get_asgi_app())
-
-            # Start the wrapper app
-            logger.info(f"🌐 Starting MCP server on http://{server_host}:{server_port}/mcp")
-            import uvicorn
-            uvicorn.run(wrapper_app, host=server_host, port=server_port)
-
-        else:
-            # Normal mode
-            logger.info(f"   URL: http://{server_host}:{server_port}/mcp")
-            mcp_logger.info("🔥 Logfire initialized for MCP server")
-            mcp_logger.info(f"🌟 Starting MCP server - host={server_host}, port={server_port}")
-            mcp.run(transport="streamable-http")
+        # Start MCP server
+        logger.info(f"   URL: http://{server_host}:{server_port}/mcp")
+        mcp_logger.info("🔥 Logfire initialized for MCP server")
+        mcp_logger.info(f"🌟 Starting MCP server - host={server_host}, port={server_port}")
+        mcp.run(transport="streamable-http")
 
     except Exception as e:
         mcp_logger.error(f"💥 Fatal error in main - error={str(e)}, error_type={type(e).__name__}")
