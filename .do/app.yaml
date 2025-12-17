@@ -255,14 +255,7 @@ alerts:
 # =============================================================================
 ingress:
   rules:
-    # Main UI
-    - component:
-        name: archon-frontend
-      match:
-        path:
-          prefix: /
-
-    # API endpoints
+    # API endpoints - MUST come before frontend catch-all
     - component:
         name: archon-server
       match:
@@ -281,3 +274,10 @@ ingress:
       match:
         path:
           prefix: /mcp
+
+    # Main UI - catch-all route MUST be last
+    - component:
+        name: archon-frontend
+      match:
+        path:
+          prefix: /
