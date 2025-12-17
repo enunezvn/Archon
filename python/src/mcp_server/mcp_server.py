@@ -559,6 +559,29 @@ def main():
         mcp_logger.info("🔥 Logfire initialized for MCP server")
         mcp_logger.info(f"🌟 Starting MCP server - host={server_host}, port={server_port}")
 
+        # Check if we're in DigitalOcean (ingress strips /mcp prefix)
+        is_digitalocean = os.getenv("SERVICE_DISCOVERY_MODE") == "digitalocean"
+
+        if is_digitalocean:
+            logger.info("🌊 DigitalOcean mode: Adding path rewriting middleware")
+            # Import after mcp is initialized
+            from starlette.applications import Starlette
+            from starlette.middleware import Middleware
+            from starlette.middleware.base import BaseHTTPMiddleware
+            from starlette.requests import Request
+
+            class PathRewriteMiddleware(BaseHTTPMiddleware):
+                async def dispatch(self, request: Request, call_next):
+                    # Rewrite paths: /sse -> /mcp/sse, /messages -> /mcp/messages
+                    if request.url.path in ["/sse", "/messages"]:
+                        request.scope["path"] = f"/mcp{request.url.path}"
+                    return await call_next(request)
+
+            # Get the FastMCP app and add middleware
+            if hasattr(mcp, 'app'):
+                mcp.app.add_middleware(PathRewriteMiddleware)
+                logger.info("✓ Path rewriting middleware added")
+
         mcp.run(transport="streamable-http")
 
     except Exception as e:
