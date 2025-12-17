@@ -31,7 +31,7 @@ services:
     dockerfile_path: python/Dockerfile.server
     source_dir: python
 
-    instance_size_slug: professional-xs  # 1 vCPU, 1GB RAM - upgrade for crawler
+    instance_size_slug: professional-m  # 2 vCPU, 4GB RAM - required for Playwright crawling
     instance_count: 1
 
     http_port: 8181

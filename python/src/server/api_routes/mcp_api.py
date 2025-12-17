@@ -20,6 +20,21 @@ router = APIRouter(prefix="/mcp", tags=["mcp"])
 
 def get_container_status() -> dict[str, Any]:
     """Get simple MCP container status without Docker management."""
+    # Check if running in cloud environment (DigitalOcean, etc.)
+    service_discovery_mode = os.getenv("SERVICE_DISCOVERY_MODE", "local")
+
+    # In cloud environments, Docker isn't available - return simplified status
+    if service_discovery_mode != "local":
+        api_logger.debug(f"Cloud mode detected ({service_discovery_mode}), returning simplified MCP status")
+        return {
+            "status": "running",
+            "uptime": None,
+            "logs": [],
+            "container_status": "managed",
+            "message": "MCP server managed by platform"
+        }
+
+    # Local Docker mode - check actual container status
     docker_client = None
     try:
         docker_client = docker.from_env()
@@ -46,7 +61,7 @@ def get_container_status() -> dict[str, Any]:
         return {
             "status": status,
             "uptime": uptime,
-            "logs": [],  # No log streaming anymore
+            "logs": [],
             "container_status": container_status
         }
 
