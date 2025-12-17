@@ -555,56 +555,11 @@ def main():
         logger.info("🚀 Starting Archon MCP Server")
         logger.info("   Mode: Streamable HTTP")
 
-        # Check if we're in DigitalOcean (ingress strips /mcp prefix)
-        is_digitalocean = os.getenv("SERVICE_DISCOVERY_MODE") == "digitalocean"
-
-        if is_digitalocean:
-            logger.info("🌊 DigitalOcean mode: Adding pure ASGI middleware to restore /mcp prefix")
-
-            # Pure ASGI middleware - no external dependencies
-            class MCPPathPrefixMiddleware:
-                """
-                ASGI middleware that prepends /mcp to all incoming request paths.
-                This solves DigitalOcean ingress prefix stripping.
-                """
-                def __init__(self, app):
-                    self.app = app
-
-                async def __call__(self, scope, receive, send):
-                    if scope["type"] in ("http", "websocket"):
-                        # Prepend /mcp to the path
-                        original_path = scope["path"]
-                        scope["path"] = f"/mcp{original_path}"
-
-                        # Also update raw_path if present
-                        if "raw_path" in scope:
-                            try:
-                                original_raw = scope["raw_path"].decode("utf-8")
-                                scope["raw_path"] = f"/mcp{original_raw}".encode("utf-8")
-                            except Exception:
-                                # If decoding fails, just prepend bytes
-                                scope["raw_path"] = b"/mcp" + scope["raw_path"]
-
-                        logger.debug(f"Path rewrite: {original_path} → {scope['path']}")
-
-                    await self.app(scope, receive, send)
-
-            # Get the FastMCP ASGI app and wrap it
-            mcp_app = mcp._get_asgi_app()
-            wrapped_app = MCPPathPrefixMiddleware(mcp_app)
-
-            # Run with uvicorn (CORS already configured in DigitalOcean ingress)
-            logger.info(f"🌐 Starting MCP server with path prefix middleware on http://{server_host}:{server_port}")
-            logger.info(f"   Incoming /sse will be rewritten to /mcp/sse")
-            import uvicorn
-            uvicorn.run(wrapped_app, host=server_host, port=server_port)
-
-        else:
-            # Normal mode
-            logger.info(f"   URL: http://{server_host}:{server_port}/mcp")
-            mcp_logger.info("🔥 Logfire initialized for MCP server")
-            mcp_logger.info(f"🌟 Starting MCP server - host={server_host}, port={server_port}")
-            mcp.run(transport="streamable-http")
+        # Start MCP server in normal mode
+        logger.info(f"   URL: http://{server_host}:{server_port}/mcp")
+        mcp_logger.info("🔥 Logfire initialized for MCP server")
+        mcp_logger.info(f"🌟 Starting MCP server - host={server_host}, port={server_port}")
+        mcp.run(transport="streamable-http")
 
     except Exception as e:
         mcp_logger.error(f"💥 Fatal error in main - error={str(e)}, error_type={type(e).__name__}")

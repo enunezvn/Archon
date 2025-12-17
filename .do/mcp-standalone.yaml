@@ -1,0 +1,87 @@
+# Standalone MCP Server for Archon
+# Deployed separately to avoid ingress routing complexities
+# URL: https://archon-mcp-standalone-xxxxx.ondigitalocean.app/mcp
+
+name: archon-mcp-standalone
+
+region: nyc
+
+services:
+  - name: mcp-server
+    github:
+      repo: enunezvn/Archon
+      branch: stable
+      deploy_on_push: true
+    dockerfile_path: python/Dockerfile.mcp
+    source_dir: python
+
+    instance_size_slug: basic-xxs  # 1 vCPU, 512MB RAM - MCP is lightweight
+    instance_count: 1
+
+    http_port: 8051
+
+    health_check:
+      port: 8051
+      initial_delay_seconds: 30
+      period_seconds: 30
+      timeout_seconds: 10
+      success_threshold: 1
+      failure_threshold: 3
+
+    envs:
+      # --- Database Configuration (REQUIRED) ---
+      - key: SUPABASE_URL
+        value: "https://tnqukarrenvlwlzkimet.supabase.co"
+        scope: RUN_AND_BUILD_TIME
+
+      - key: SUPABASE_SERVICE_KEY
+        value: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRucXVrYXJyZW52bHdsemtpbWV0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDI0NDMxOCwiZXhwIjoyMDc5ODIwMzE4fQ.m2PwMz-j7T_VTJI5IAwKc0kRJm_SoAlp6sp2DW7N3-w"
+        scope: RUN_AND_BUILD_TIME
+
+      # --- Service Discovery (LOCAL mode - standalone app) ---
+      - key: SERVICE_DISCOVERY_MODE
+        value: "local"
+        scope: RUN_TIME
+
+      - key: TRANSPORT
+        value: "sse"
+        scope: RUN_TIME
+
+      - key: LOG_LEVEL
+        value: "INFO"
+        scope: RUN_TIME
+
+      # --- Backend API URL (points to main Archon deployment) ---
+      - key: API_SERVICE_URL
+        value: "https://archon-mcp-jipyy.ondigitalocean.app"
+        scope: RUN_TIME
+
+      # --- Port Configuration ---
+      - key: ARCHON_MCP_PORT
+        value: "8051"
+        scope: RUN_AND_BUILD_TIME
+
+      - key: ARCHON_SERVER_PORT
+        value: "8181"
+        scope: RUN_TIME
+
+      # --- Feature Flags ---
+      - key: AGENTS_ENABLED
+        value: "false"
+        scope: RUN_TIME
+
+# CORS configuration for external MCP client access
+cors:
+  allow_origins:
+    - prefix: https://
+  allow_methods:
+    - GET
+    - POST
+    - OPTIONS
+  allow_headers:
+    - "*"
+  allow_credentials: true
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
