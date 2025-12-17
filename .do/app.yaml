@@ -109,6 +109,10 @@ services:
 
     http_port: 8051
 
+    # Give MCP its own dedicated route (not through shared ingress)
+    routes:
+      - path: /mcp
+
     health_check:
       port: 8051
       initial_delay_seconds: 30
@@ -267,12 +271,8 @@ ingress:
         path:
           prefix: /socket.io
 
-    # MCP endpoint for AI coding assistants
-    - component:
-        name: archon-mcp
-      match:
-        path:
-          prefix: /mcp
+    # MCP has its own dedicated route (configured in service routes above)
+    # Not routed through shared ingress to avoid path prefix issues
 
     # Main UI - catch-all route MUST be last
     - component:
