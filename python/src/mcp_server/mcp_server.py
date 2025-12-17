@@ -555,11 +555,58 @@ def main():
         logger.info("🚀 Starting Archon MCP Server")
         logger.info("   Mode: Streamable HTTP")
 
-        # Start MCP server
-        logger.info(f"   URL: http://{server_host}:{server_port}/mcp")
-        mcp_logger.info("🔥 Logfire initialized for MCP server")
-        mcp_logger.info(f"🌟 Starting MCP server - host={server_host}, port={server_port}")
-        mcp.run(transport="streamable-http")
+        # Check if we're in DigitalOcean (ingress strips /mcp prefix)
+        is_digitalocean = os.getenv("SERVICE_DISCOVERY_MODE") == "digitalocean"
+
+        if is_digitalocean:
+            logger.info("🌊 DigitalOcean mode: Adding ASGI middleware to restore /mcp prefix")
+            from starlette.applications import Starlette
+            from starlette.middleware import Middleware
+            from starlette.middleware.cors import CORSMiddleware
+
+            # Create ASGI middleware that adds /mcp prefix
+            class MCPPrefixMiddleware:
+                def __init__(self, app):
+                    self.app = app
+
+                async def __call__(self, scope, receive, send):
+                    if scope["type"] == "http":
+                        # Add /mcp prefix to the path
+                        scope["path"] = f"/mcp{scope['path']}"
+                        scope["raw_path"] = f"/mcp{scope['raw_path'].decode()}".encode()
+
+                    await self.app(scope, receive, send)
+
+            # Get the FastMCP ASGI app
+            mcp_app = mcp._get_asgi_app()
+
+            # Wrap it with our prefix middleware and CORS
+            app = Starlette(
+                middleware=[
+                    Middleware(
+                        CORSMiddleware,
+                        allow_origins=["*"],
+                        allow_credentials=True,
+                        allow_methods=["*"],
+                        allow_headers=["*"],
+                    ),
+                ]
+            )
+
+            # Apply prefix middleware
+            wrapped_app = MCPPrefixMiddleware(mcp_app)
+
+            # Run with uvicorn
+            logger.info(f"🌐 Starting MCP server with prefix middleware on http://{server_host}:{server_port}")
+            import uvicorn
+            uvicorn.run(wrapped_app, host=server_host, port=server_port)
+
+        else:
+            # Normal mode
+            logger.info(f"   URL: http://{server_host}:{server_port}/mcp")
+            mcp_logger.info("🔥 Logfire initialized for MCP server")
+            mcp_logger.info(f"🌟 Starting MCP server - host={server_host}, port={server_port}")
+            mcp.run(transport="streamable-http")
 
     except Exception as e:
         mcp_logger.error(f"💥 Fatal error in main - error={str(e)}, error_type={type(e).__name__}")

@@ -267,15 +267,12 @@ ingress:
         path:
           prefix: /socket.io
 
-    # MCP endpoint - preserve /mcp prefix for MCP server
+    # MCP endpoint - middleware adds /mcp prefix back after ingress strips it
     - component:
         name: archon-mcp
       match:
         path:
           prefix: /mcp
-      rewrite:
-        regex: ^/mcp(/.*)?$
-        substitution: /mcp\1
       cors:
         allow_origins:
           - regex: .*
