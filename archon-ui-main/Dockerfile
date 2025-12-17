@@ -23,16 +23,11 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-
-# Install only production dependencies and vite for preview server
-RUN npm ci --omit=dev && npm install vite
+# Install serve for production static file serving
+RUN npm install -g serve
 
 # Copy built assets from builder stage
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/vite.config.ts ./vite.config.ts
-COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 # Set environment variables
 ENV NODE_ENV=production
@@ -43,5 +38,5 @@ ARG ARCHON_UI_PORT=3737
 ENV ARCHON_UI_PORT=${ARCHON_UI_PORT}
 EXPOSE ${ARCHON_UI_PORT}
 
-# Run the production preview server
-CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "3737"]
+# Run the production server with serve (no host restrictions)
+CMD ["serve", "-s", "dist", "-l", "3737"]
